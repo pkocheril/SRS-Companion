@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OPO Companion</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  /* ── fallback stack if offline ── */
+  :root {
+    --mono: 'IBM Plex Mono', 'Courier New', monospace;
+    --sans: 'IBM Plex Sans', 'Helvetica Neue', sans-serif;
+
+    --bg:        #0e0f11;
+    --panel:     #15171b;
+    --border:    #252830;
+    --border2:   #31353f;
+    --accent:    #5b8af5;
+    --accent2:   #38c9a0;
+    --warn:      #e0a832;
+    --text:      #d4d8e2;
+    --muted:     #6b7080;
+    --label:     #8b91a0;
+    --input-bg:  #1c1f26;
+    --rad:       6px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { font-size: 14px; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-weight: 300;
+    min-height: 100vh;
+    padding: 32px 24px 60px;
+  }
+
+  /* ── header ── */
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    margin-bottom: 36px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 18px;
+  }
+  header h1 {
+    font-family: var(--mono);
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: var(--accent);
+  }
+  header p {
+    font-size: .8rem;
+    color: var(--muted);
+    letter-spacing: .04em;
+  }
+
+  /* ── layout ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 980px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--rad);
+    padding: 22px 24px;
+  }
+  .card.full { grid-column: 1 / -1; }
+
+  .card-title {
+    font-family: var(--mono);
+    font-size: .72rem;
+    font-weight: 500;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title::before {
+    content: '';
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .card.green .card-title::before { background: var(--accent2); }
+  .card.amber .card-title::before { background: var(--warn); }
+
+  /* ── form elements ── */
+  .field { margin-bottom: 14px; }
+  .field:last-of-type { margin-bottom: 0; }
+
+  label {
+    display: block;
+    font-size: .75rem;
+    color: var(--label);
+    margin-bottom: 5px;
+    letter-spacing: .03em;
+  }
+
+  input[type="number"], input[type="text"] {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border2);
+    border-radius: var(--rad);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: .88rem;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  input:focus { border-color: var(--accent); }
+  input.green:focus { border-color: var(--accent2); }
+
+  /* ── result display ── */
+  .result-block {
+    background: var(--input-bg);
+    border: 1px solid var(--border2);
+    border-radius: var(--rad);
+    padding: 10px 12px;
+    margin-top: 16px;
+  }
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 3px 0;
+  }
+  .result-row + .result-row { border-top: 1px solid var(--border); }
+  .result-key {
+    font-size: .72rem;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+  .result-val {
+    font-family: var(--mono);
+    font-size: .95rem;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .card.green .result-val { color: var(--accent2); }
+
+  /* ── divider ── */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 18px 0;
+  }
+
+  /* ── sweep section ── */
+  .sweep-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  /* ── table ── */
+  .table-wrap {
+    overflow-x: auto;
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--border2);
+    border-radius: var(--rad);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: .78rem;
+  }
+  thead th {
+    background: #1c1f26;
+    color: var(--label);
+    font-weight: 500;
+    padding: 8px 12px;
+    text-align: right;
+    letter-spacing: .06em;
+    border-bottom: 1px solid var(--border2);
+    position: sticky; top: 0;
+  }
+  thead th:first-child { text-align: left; }
+  tbody tr:hover { background: rgba(91,138,245,.05); }
+  tbody td {
+    padding: 6px 12px;
+    text-align: right;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td:first-child { text-align: left; color: var(--muted); }
+  tbody tr:last-child td { border-bottom: none; }
+
+  /* ── buttons ── */
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  button {
+    font-family: var(--mono);
+    font-size: .75rem;
+    font-weight: 500;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 8px 16px;
+    border-radius: var(--rad);
+    border: 1px solid var(--border2);
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: #4070e0; border-color: #4070e0; }
+  .btn-secondary {
+    background: transparent;
+    color: var(--label);
+  }
+  .btn-secondary:hover { background: var(--input-bg); color: var(--text); }
+  .btn-export {
+    background: transparent;
+    color: var(--accent2);
+    border-color: var(--accent2);
+  }
+  .btn-export:hover { background: rgba(56,201,160,.1); }
+  .btn-export:disabled { opacity: .35; cursor: default; }
+
+  /* ── calibration note ── */
+  .cal-note {
+    font-size: .72rem;
+    color: var(--muted);
+    font-family: var(--mono);
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+
+  /* ── status ── */
+  #status {
+    font-size: .72rem;
+    font-family: var(--mono);
+    color: var(--warn);
+    margin-top: 10px;
+    min-height: 1.2em;
+  }
+
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: 1fr; }
+    .card.full { grid-column: 1; }
+    .sweep-inputs { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>OPO Companion</h1>
+  <p>SRS wavelength &amp; delay calculator</p>
+</header>
+
+<div class="grid">
+
+  <!-- ══ CARD 1: Single-point wavelength ══ -->
+  <div class="card">
+    <div class="card-title">Raman Shift → Pump λ</div>
+
+    <div class="field">
+      <label>Vibrational frequency (cm⁻¹)</label>
+      <input type="number" id="vib1" value="2950" step="1" min="0"
+             oninput="calcSingle()">
+    </div>
+    <div class="field">
+      <label>Stokes wavelength (nm)</label>
+      <input type="number" id="stokes1" value="1031.2" step="0.1" min="1"
+             oninput="calcSingle()">
+    </div>
+
+    <div class="result-block">
+      <div class="result-row">
+        <span class="result-key">ν_Stokes</span>
+        <span class="result-val" id="r-nu-stokes">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">ν_pump</span>
+        <span class="result-val" id="r-nu-pump">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">λ_pump</span>
+        <span class="result-val" id="r-lam-pump">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CARD 2: Single-point delay ══ -->
+  <div class="card green">
+    <div class="card-title">Pump λ → Time Delay</div>
+
+    <div class="field">
+      <label>Pump wavelength (nm)</label>
+      <input type="number" id="lam2" value="821" step="0.1"
+             class="green" oninput="calcDelay()">
+    </div>
+
+    <hr class="divider">
+    <div style="margin-bottom:6px;font-size:.72rem;color:var(--label);">Calibration</div>
+
+    <div class="field">
+      <label>Reference wavelength λ_ref (nm)</label>
+      <input type="number" id="cal-ref-lam" value="821" step="0.1"
+             class="green" oninput="calcDelay()">
+    </div>
+    <div class="field">
+      <label>Reference delay τ_ref (fs)</label>
+      <input type="number" id="cal-ref-delay" value="6250" step="1"
+             class="green" oninput="calcDelay()">
+    </div>
+
+    <div class="cal-note" id="cal-note"></div>
+
+    <div class="result-block">
+      <div class="result-row">
+        <span class="result-key">Δλ from ref</span>
+        <span class="result-val" id="r-dlam">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Time delay</span>
+        <span class="result-val" id="r-delay">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CARD 3: Sweep ══ -->
+  <div class="card full amber">
+    <div class="card-title">Sweep &amp; Export</div>
+
+    <div class="sweep-inputs">
+      <div class="field">
+        <label>Start ν_vib (cm⁻¹)</label>
+        <input type="number" id="sw-start" value="500" step="1" min="0">
+      </div>
+      <div class="field">
+        <label>Stop ν_vib (cm⁻¹)</label>
+        <input type="number" id="sw-stop" value="3500" step="1" min="0">
+      </div>
+      <div class="field">
+        <label>Step size (cm⁻¹)</label>
+        <input type="number" id="sw-step" value="100" step="1" min="1">
+      </div>
+    </div>
+    <div class="field" style="max-width:260px;">
+      <label>Stokes wavelength (nm)</label>
+      <input type="number" id="sw-stokes" value="1031.2" step="0.1" min="1">
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" onclick="runSweep()">Generate</button>
+      <button class="btn-export" id="btn-export" onclick="exportTxt()" disabled>Export .txt</button>
+      <button class="btn-secondary" onclick="clearSweep()">Clear</button>
+    </div>
+
+    <div id="status"></div>
+
+    <div class="table-wrap" id="table-wrap" style="margin-top:14px; display:none;">
+      <table>
+        <thead>
+          <tr>
+            <th>ν_vib (cm⁻¹)</th>
+            <th>ν_pump (cm⁻¹)</th>
+            <th>λ_pump (nm)</th>
+            <th>Δλ (nm)</th>
+            <th>Delay (fs)</th>
+          </tr>
+        </thead>
+        <tbody id="sweep-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- .grid -->
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────
+const SLOPE_FS_PER_NM = -18; // +180 fs per -10 nm → -18 fs/nm
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function nmToCm1(nm) { return 1e7 / nm; }          // nm → cm⁻¹
+function cm1ToNm(cm1) { return 1e7 / cm1; }         // cm⁻¹ → nm
+function fmt(v, dec=2) {
+  return isFinite(v) ? v.toFixed(dec) : '—';
+}
+
+// ── Card 1: single wavelength ──────────────────────────────────────────────
+function calcSingle() {
+  const vib    = parseFloat(document.getElementById('vib1').value);
+  const stokes = parseFloat(document.getElementById('stokes1').value);
+  if (!isFinite(vib) || !isFinite(stokes) || stokes <= 0) return;
+
+  const nuStokes = nmToCm1(stokes);
+  const nuPump   = nuStokes + vib;
+  const lamPump  = cm1ToNm(nuPump);
+
+  document.getElementById('r-nu-stokes').textContent = fmt(nuStokes,1) + ' cm⁻¹';
+  document.getElementById('r-nu-pump').textContent   = fmt(nuPump,1)   + ' cm⁻¹';
+  document.getElementById('r-lam-pump').textContent  = fmt(lamPump,2)  + ' nm';
+
+  // mirror pump wavelength into delay card
+  document.getElementById('lam2').value = fmt(lamPump, 2);
+  calcDelay();
+}
+
+// ── Card 2: delay ──────────────────────────────────────────────────────────
+function calcDelay() {
+  const lam      = parseFloat(document.getElementById('lam2').value);
+  const refLam   = parseFloat(document.getElementById('cal-ref-lam').value);
+  const refDelay = parseFloat(document.getElementById('cal-ref-delay').value);
+
+  // update calibration note
+  document.getElementById('cal-note').textContent =
+    `Slope: ${SLOPE_FS_PER_NM} fs/nm  (+180 fs per −10 nm)`;
+
+  if (!isFinite(lam) || !isFinite(refLam) || !isFinite(refDelay)) return;
+
+  const dLam  = lam - refLam;
+  const delay = refDelay + dLam * SLOPE_FS_PER_NM;
+
+  document.getElementById('r-dlam').textContent  = fmt(dLam,2) + ' nm';
+  document.getElementById('r-delay').textContent = fmt(delay,0) + ' fs';
+}
+
+// ── Sweep ──────────────────────────────────────────────────────────────────
+let sweepData = [];
+
+function sweepRow(vib, stokesNm, refLam, refDelay) {
+  const nuStokes = nmToCm1(stokesNm);
+  const nuPump   = nuStokes + vib;
+  const lamPump  = cm1ToNm(nuPump);
+  const dLam     = lamPump - refLam;
+  const delay    = refDelay + dLam * SLOPE_FS_PER_NM;
+  return { vib, nuPump, lamPump, dLam, delay };
+}
+
+function runSweep() {
+  const start   = parseFloat(document.getElementById('sw-start').value);
+  const stop    = parseFloat(document.getElementById('sw-stop').value);
+  const step    = parseFloat(document.getElementById('sw-step').value);
+  const stokes  = parseFloat(document.getElementById('sw-stokes').value);
+  const refLam  = parseFloat(document.getElementById('cal-ref-lam').value);
+  const refDel  = parseFloat(document.getElementById('cal-ref-delay').value);
+  const status  = document.getElementById('status');
+
+  if (!isFinite(start)||!isFinite(stop)||!isFinite(step)||step<=0) {
+    status.textContent = 'Error: check sweep parameters.'; return;
+  }
+  if (start > stop) { status.textContent = 'Error: start > stop.'; return; }
+
+  const MAX = 2000;
+  const n = Math.floor((stop - start) / step) + 1;
+  if (n > MAX) { status.textContent = `Too many rows (${n}). Increase step size.`; return; }
+
+  sweepData = [];
+  const tbody = document.getElementById('sweep-body');
+  tbody.innerHTML = '';
+
+  for (let v = start; v <= stop + 1e-9; v += step) {
+    const row = sweepRow(Math.round(v*1e6)/1e6, stokes, refLam, refDel);
+    sweepData.push(row);
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmt(row.vib, 0)}</td>
+      <td>${fmt(row.nuPump, 1)}</td>
+      <td>${fmt(row.lamPump, 2)}</td>
+      <td>${fmt(row.dLam, 2)}</td>
+      <td>${fmt(row.delay, 0)}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  document.getElementById('table-wrap').style.display = 'block';
+  document.getElementById('btn-export').disabled = false;
+  status.textContent = `${sweepData.length} rows generated.`;
+}
+
+function clearSweep() {
+  sweepData = [];
+  document.getElementById('sweep-body').innerHTML = '';
+  document.getElementById('table-wrap').style.display = 'none';
+  document.getElementById('btn-export').disabled = true;
+  document.getElementById('status').textContent = '';
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+function exportTxt() {
+  if (!sweepData.length) return;
+
+  const refLam  = document.getElementById('cal-ref-lam').value;
+  const refDel  = document.getElementById('cal-ref-delay').value;
+  const stokes  = document.getElementById('sw-stokes').value;
+
+  const header = [
+    '# OPO Companion — Sweep Export',
+    `# Generated: ${new Date().toISOString()}`,
+    `# Stokes: ${stokes} nm`,
+    `# Delay ref: ${refDel} fs @ ${refLam} nm   slope: ${SLOPE_FS_PER_NM} fs/nm`,
+    '#',
+    '# nu_vib(cm-1)\tnu_pump(cm-1)\tlambda_pump(nm)\tdelta_lambda(nm)\tdelay(fs)',
+  ].join('\n');
+
+  const rows = sweepData.map(r =>
+    [fmt(r.vib,0), fmt(r.nuPump,1), fmt(r.lamPump,2), fmt(r.dLam,2), fmt(r.delay,0)].join('\t')
+  );
+
+  const blob = new Blob([header + '\n' + rows.join('\n')], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `opo_sweep_${Date.now()}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+calcSingle();
+calcDelay();
+</script>
+</body>
+</html>
