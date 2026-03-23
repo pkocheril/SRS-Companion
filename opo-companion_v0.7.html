@@ -444,6 +444,57 @@
     transition: border-color .15s;
   }
   select:focus { border-color: #a78bfa; }
+
+  /* ── ROI + plot ── */
+  .pc-canvas-wrap { position: relative; }
+  .pc-canvas-wrap canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+  #pc-roi-overlay {
+    position: absolute; inset: 0;
+    cursor: crosshair;
+  }
+  .pc-plot-section {
+    display: none;
+    margin-top: 16px;
+    border: 1px solid var(--border2);
+    border-radius: var(--rad);
+    overflow: hidden;
+    background: var(--input-bg);
+  }
+  .pc-plot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border2);
+    font-family: var(--mono);
+    font-size: .68rem;
+    color: var(--muted);
+  }
+  .pc-plot-legend {
+    display: flex;
+    gap: 14px;
+  }
+  .pc-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: .68rem;
+    font-family: var(--mono);
+  }
+  .pc-legend-dot {
+    width: 18px; height: 2px; border-radius: 1px;
+  }
+  #pc-plot-canvas {
+    display: block;
+    width: 100%;
+    cursor: crosshair;
+  }
+  .pc-roi-info {
+    font-size: .68rem;
+    font-family: var(--mono);
+    color: var(--muted);
+    padding: 4px 12px 6px;
+  }
 </style>
 </head>
 <body>
@@ -672,17 +723,35 @@
         </div>
         <div style="display:flex; gap:10px; margin-bottom:10px;">
           <div class="pc-preview-box">
-            <div class="pc-preview-label">Original</div>
-            <div class="pc-canvas-wrap"><canvas id="pc-canvas-orig" width="256" height="256"></canvas></div>
+            <div class="pc-preview-label">Original <span style="color:var(--border2); font-size:.62rem;">(drag to select ROI)</span></div>
+            <div class="pc-canvas-wrap" id="pc-orig-wrap">
+              <canvas id="pc-canvas-orig" width="256" height="256"></canvas>
+              <canvas id="pc-roi-overlay" width="256" height="256"></canvas>
+            </div>
           </div>
           <div class="pc-preview-box" id="pc-corrected-box" style="display:none;">
             <div class="pc-preview-label">Corrected</div>
-            <div class="pc-canvas-wrap"><canvas id="pc-canvas-corr" width="256" height="256"></canvas></div>
+            <div class="pc-canvas-wrap" id="pc-corr-wrap">
+              <canvas id="pc-canvas-corr" width="256" height="256"></canvas>
+              <canvas id="pc-roi-overlay-corr" width="256" height="256" style="position:absolute;inset:0;pointer-events:none;"></canvas>
+            </div>
           </div>
         </div>
         <input type="range" class="pc-frame-slider" id="pc-frame-slider" min="0" value="0"
                oninput="previewFrame(parseInt(this.value))">
         <span class="pc-frame-label" id="pc-slider-label">—</span>
+
+        <!-- Spectral profile plot -->
+        <div class="pc-plot-section" id="pc-plot-section">
+          <div class="pc-plot-header">
+            <span id="pc-roi-info" class="pc-roi-info" style="padding:0;"></span>
+            <div class="pc-plot-legend">
+              <div class="pc-legend-item"><div class="pc-legend-dot" style="background:#5b8af5;"></div>Original</div>
+              <div class="pc-legend-item" id="pc-legend-corr" style="display:none;"><div class="pc-legend-dot" style="background:#38c9a0;"></div>Corrected</div>
+            </div>
+          </div>
+          <canvas id="pc-plot-canvas" height="200"></canvas>
+        </div>
       </div>
 
     </div>
@@ -1352,6 +1421,9 @@ function previewFrame(idx) {
     renderToCanvas(pc.corrected[idx], frame.w, frame.h, 'pc-canvas-corr');
     document.getElementById('pc-corrected-box').style.display = 'block';
   }
+
+  // Keep ROI overlay in sync
+  if (roi.defined || roi.active) drawRoiOverlays();
 }
 
 function renderToCanvas(pixels, w, h, canvasId) {
@@ -1466,6 +1538,9 @@ async function runCorrection() {
 
   pcSetStatus(`Done — exported "${outName}"  (${nF} frames, factor range ${Math.min(...factors).toFixed(3)}–${Math.max(...factors).toFixed(3)})`);
   setTimeout(() => { prog.style.display='none'; progBar.style.width='0%'; }, 2000);
+
+  // Refresh spectral plot with corrected data
+  if (roi.defined) updateSpectralPlot();
 }
 
 function resetCorrection() {
@@ -1488,6 +1563,13 @@ function resetCorrection() {
   document.getElementById('pc-frame-slider').value = 0;
   document.getElementById('pc-progress').style.display = 'none';
   pcSetStatus('');
+  // Clear ROI and plot
+  roi.active = false; roi.defined = false;
+  drawRoiOverlays();
+  document.getElementById('pc-plot-section').style.display = 'none';
+  const plotCanvas = document.getElementById('pc-plot-canvas');
+  plotCanvas._drawArgs = null;
+  plotCanvas.getContext('2d').clearRect(0, 0, plotCanvas.width, plotCanvas.height);
   // Clear canvases
   ['pc-canvas-orig','pc-canvas-corr'].forEach(id => {
     const c = document.getElementById(id);
@@ -1503,6 +1585,347 @@ function pcSetStatus(msg) {
 document.getElementById('pc-channels').addEventListener('change', () => {
   if (pc.rawPowerCols) buildPowerTable();
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// ROI SELECTION & SPECTRAL PROFILE PLOT
+// ════════════════════════════════════════════════════════════════════════════
+const roi = { active: false, x0:0, y0:0, x1:0, y1:0, defined: false };
+let plotHoverX = null;
+
+// ── wire up ROI drawing on the overlay canvas ─────────────────────────────
+function initRoiEvents() {
+  const overlay = document.getElementById('pc-roi-overlay');
+
+  function canvasToImageCoords(e) {
+    const rect  = overlay.getBoundingClientRect();
+    const imgW  = overlay.width, imgH = overlay.height;
+    const dispW = rect.width,    dispH = rect.height;
+    return {
+      x: Math.round((e.clientX - rect.left) * imgW / dispW),
+      y: Math.round((e.clientY - rect.top)  * imgH / dispH),
+    };
+  }
+
+  overlay.addEventListener('mousedown', e => {
+    if (!pc.tiffFrames) return;
+    const {x, y} = canvasToImageCoords(e);
+    roi.active = true; roi.defined = false;
+    roi.x0 = roi.x1 = x; roi.y0 = roi.y1 = y;
+    e.preventDefault();
+  });
+
+  overlay.addEventListener('mousemove', e => {
+    if (!roi.active) return;
+    const {x, y} = canvasToImageCoords(e);
+    roi.x1 = x; roi.y1 = y;
+    drawRoiOverlays();
+  });
+
+  const finish = () => {
+    if (!roi.active) return;
+    roi.active  = false;
+    roi.defined = (Math.abs(roi.x1-roi.x0) > 2 && Math.abs(roi.y1-roi.y0) > 2);
+    if (roi.defined) updateSpectralPlot();
+  };
+  overlay.addEventListener('mouseup',    finish);
+  overlay.addEventListener('mouseleave', finish);
+}
+
+function getRoiRect() {
+  // normalise so x0<x1, y0<y1; clamp to image
+  if (!pc.tiffFrames) return null;
+  const {w, h} = pc.tiffFrames[0];
+  return {
+    x: Math.max(0, Math.min(roi.x0, roi.x1)),
+    y: Math.max(0, Math.min(roi.y0, roi.y1)),
+    w: Math.min(w, Math.max(roi.x0, roi.x1)) - Math.max(0, Math.min(roi.x0, roi.x1)),
+    h: Math.min(h, Math.max(roi.y0, roi.y1)) - Math.max(0, Math.min(roi.y0, roi.y1)),
+    imgW: w, imgH: h,
+  };
+}
+
+function drawRoiOverlays() {
+  drawRoiOnCanvas('pc-roi-overlay',      true);
+  drawRoiOnCanvas('pc-roi-overlay-corr', false);
+}
+
+function drawRoiOnCanvas(canvasId, isInteractive) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const r = getRoiRect();
+  if (!r) return;
+
+  // Match overlay dimensions to image canvas
+  const imgCanvas = document.getElementById(isInteractive ? 'pc-canvas-orig' : 'pc-canvas-corr');
+  canvas.width  = imgCanvas.width;
+  canvas.height = imgCanvas.height;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!roi.defined && !roi.active) return;
+
+  // Dim outside ROI
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(r.x, r.y, r.w, r.h);
+
+  // ROI border
+  ctx.strokeStyle = '#e0a832';
+  ctx.lineWidth   = 1.5;
+  ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w, r.h);
+
+  // Corner handles
+  const cs = 5;
+  ctx.fillStyle = '#e0a832';
+  [[r.x, r.y],[r.x+r.w, r.y],[r.x, r.y+r.h],[r.x+r.w, r.y+r.h]].forEach(([cx,cy]) => {
+    ctx.fillRect(cx-cs/2, cy-cs/2, cs, cs);
+  });
+}
+
+// ── compute mean intensity over ROI for one frame's pixel array ───────────
+function roiMean(pixels, imgW, r) {
+  if (r.w <= 0 || r.h <= 0) return 0;
+  let sum = 0, n = 0;
+  for (let row = r.y; row < r.y + r.h; row++) {
+    for (let col = r.x; col < r.x + r.w; col++) {
+      sum += pixels[row * imgW + col];
+      n++;
+    }
+  }
+  return n > 0 ? sum / n : 0;
+}
+
+// ── get wavelength axis from sweep card, or fall back to frame index ───────
+function getWavelengthAxis(nFrames) {
+  const start = parseFloat(document.getElementById('sw-start').value);
+  const stop  = parseFloat(document.getElementById('sw-stop').value);
+  const step  = parseFloat(document.getElementById('sw-step').value);
+  if (isFinite(start) && isFinite(stop) && isFinite(step) && step > 0) {
+    const axis = [];
+    for (let i = 0; i < nFrames; i++) axis.push(start + i * step);
+    return axis; // nm
+  }
+  return Array.from({length: nFrames}, (_, i) => i + 1); // frame numbers
+}
+
+function getStokesNm() {
+  return parseFloat(document.getElementById('sw-stokes').value) || 1031.2;
+}
+
+// ── compute and draw spectral profile ─────────────────────────────────────
+function updateSpectralPlot() {
+  if (!pc.tiffFrames || !roi.defined) return;
+  const r    = getRoiRect();
+  if (!r || r.w <= 0 || r.h <= 0) return;
+  const imgW = pc.tiffFrames[0].w;
+  const nF   = pc.tiffFrames.length;
+  const nmAxis = getWavelengthAxis(nF);
+
+  const origProfile = pc.tiffFrames.map(f => roiMean(f.pixels, imgW, r));
+  const corrProfile = pc.corrected  ? pc.corrected.map(f => roiMean(f, imgW, r)) : null;
+
+  document.getElementById('pc-plot-section').style.display = 'block';
+  document.getElementById('pc-legend-corr').style.display  = corrProfile ? 'flex' : 'none';
+  document.getElementById('pc-roi-info').textContent =
+    `ROI: ${r.w}×${r.h} px  (x${r.x}, y${r.y})`;
+
+  drawSpectralPlot(nmAxis, origProfile, corrProfile);
+}
+
+function drawSpectralPlot(nmAxis, origProfile, corrProfile) {
+  const canvas  = document.getElementById('pc-plot-canvas');
+  const dpr     = window.devicePixelRatio || 1;
+  const dispW   = canvas.parentElement.clientWidth || 600;
+  const dispH   = 200;
+  canvas.style.width  = dispW + 'px';
+  canvas.style.height = dispH + 'px';
+  canvas.width  = Math.round(dispW * dpr);
+  canvas.height = Math.round(dispH * dpr);
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const PAD = { top: 18, right: 24, bottom: 52, left: 62 };
+  const pw  = dispW - PAD.left - PAD.right;
+  const ph  = dispH - PAD.top  - PAD.bottom;
+
+  ctx.clearRect(0, 0, dispW, dispH);
+
+  const hasNm   = nmAxis[0] !== 1 || nmAxis.length === 1;
+  const stokes  = getStokesNm();
+  const cm1Axis = nmAxis.map(nm => nmToCm1(nm) - nmToCm1(stokes));
+
+  // ── y range ──────────────────────────────────────────────────────────────
+  const allVals = [...origProfile, ...(corrProfile || [])];
+  let yMin = Math.min(...allVals), yMax = Math.max(...allVals);
+  const yPad = (yMax - yMin) * 0.08 || 1;
+  yMin -= yPad; yMax += yPad;
+
+  const xToDisp = i => PAD.left + (i / (nmAxis.length - 1 || 1)) * pw;
+  const yToDisp = v => PAD.top  + ph - ((v - yMin) / (yMax - yMin)) * ph;
+
+  // ── background ───────────────────────────────────────────────────────────
+  ctx.fillStyle = '#1c1f26';
+  ctx.fillRect(PAD.left, PAD.top, pw, ph);
+
+  // ── gridlines ────────────────────────────────────────────────────────────
+  ctx.strokeStyle = '#252830';
+  ctx.lineWidth = 1;
+  const nYGrid = 4;
+  for (let g = 0; g <= nYGrid; g++) {
+    const yv = yMin + (yMax - yMin) * g / nYGrid;
+    const yd = yToDisp(yv);
+    ctx.beginPath(); ctx.moveTo(PAD.left, yd); ctx.lineTo(PAD.left + pw, yd); ctx.stroke();
+  }
+
+  // ── y axis labels ─────────────────────────────────────────────────────────
+  ctx.fillStyle = '#6b7080';
+  ctx.font = `${10}px 'IBM Plex Mono', monospace`;
+  ctx.textAlign = 'right';
+  for (let g = 0; g <= nYGrid; g++) {
+    const yv = yMin + (yMax - yMin) * g / nYGrid;
+    const yd = yToDisp(yv);
+    ctx.fillText(yv >= 1000 ? (yv/1000).toFixed(1)+'k' : yv.toFixed(0), PAD.left - 5, yd + 3);
+  }
+  // y-axis label
+  ctx.save();
+  ctx.translate(12, PAD.top + ph/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#8b91a0';
+  ctx.font = `10px 'IBM Plex Mono', monospace`;
+  ctx.fillText('Mean intensity', 0, 0);
+  ctx.restore();
+
+  // ── x axis: bottom = nm, top = cm⁻¹ ─────────────────────────────────────
+  const nXTick = Math.min(nmAxis.length, 8);
+  const step   = Math.max(1, Math.floor(nmAxis.length / nXTick));
+
+  ctx.textAlign = 'center';
+  ctx.font = `10px 'IBM Plex Mono', monospace`;
+
+  for (let i = 0; i < nmAxis.length; i += step) {
+    const xd = xToDisp(i);
+    // tick
+    ctx.strokeStyle = '#31353f';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xd, PAD.top + ph); ctx.lineTo(xd, PAD.top + ph + 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xd, PAD.top); ctx.lineTo(xd, PAD.top - 4); ctx.stroke();
+
+    if (hasNm) {
+      // bottom: nm
+      ctx.fillStyle = '#8b91a0';
+      ctx.fillText(nmAxis[i].toFixed(1), xd, PAD.top + ph + 14);
+      // top: cm⁻¹
+      ctx.fillStyle = '#6b7080';
+      ctx.fillText(Math.round(cm1Axis[i]), xd, PAD.top - 7);
+    } else {
+      ctx.fillStyle = '#8b91a0';
+      ctx.fillText('Frame ' + nmAxis[i], xd, PAD.top + ph + 14);
+    }
+  }
+
+  // axis labels
+  ctx.fillStyle = '#8b91a0';
+  ctx.font = `10px 'IBM Plex Mono', monospace`;
+  ctx.textAlign = 'center';
+  if (hasNm) {
+    ctx.fillText('Pump wavelength (nm)', PAD.left + pw/2, dispH - 4);
+    ctx.fillStyle = '#6b7080';
+    ctx.fillText('ν_vib (cm⁻¹)', PAD.left + pw/2, 9);
+  } else {
+    ctx.fillText('Frame', PAD.left + pw/2, dispH - 4);
+  }
+
+  // ── axis border ──────────────────────────────────────────────────────────
+  ctx.strokeStyle = '#31353f';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(PAD.left, PAD.top, pw, ph);
+
+  // ── draw lines ────────────────────────────────────────────────────────────
+  function drawLine(profile, color, dash=[]) {
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.5;
+    ctx.setLineDash(dash);
+    profile.forEach((v, i) => {
+      const xd = xToDisp(i), yd = yToDisp(v);
+      i === 0 ? ctx.moveTo(xd, yd) : ctx.lineTo(xd, yd);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  if (corrProfile) drawLine(corrProfile, '#38c9a0');
+  drawLine(origProfile, '#5b8af5');
+
+  // ── hover crosshair ───────────────────────────────────────────────────────
+  if (plotHoverX !== null) {
+    const idx = Math.max(0, Math.min(nmAxis.length-1, Math.round((plotHoverX - PAD.left) / pw * (nmAxis.length-1))));
+    const xd  = xToDisp(idx);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xd, PAD.top); ctx.lineTo(xd, PAD.top+ph); ctx.stroke();
+
+    // tooltip box
+    const origV = origProfile[idx];
+    const corrV = corrProfile ? corrProfile[idx] : null;
+    const lines = [
+      hasNm ? `λ = ${nmAxis[idx].toFixed(2)} nm` : `Frame ${nmAxis[idx]}`,
+      hasNm ? `ν = ${Math.round(cm1Axis[idx])} cm⁻¹` : '',
+      `Orig: ${origV.toFixed(1)}`,
+      corrV !== null ? `Corr: ${corrV.toFixed(1)}` : '',
+    ].filter(Boolean);
+
+    const boxW = 130, boxH = lines.length * 14 + 10;
+    let bx = xd + 6, by = PAD.top + 6;
+    if (bx + boxW > PAD.left + pw) bx = xd - boxW - 6;
+
+    ctx.fillStyle = 'rgba(14,15,17,0.92)';
+    ctx.strokeStyle = '#31353f';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, boxW, boxH, 4);
+    ctx.fill(); ctx.stroke();
+
+    ctx.font = `10px 'IBM Plex Mono', monospace`;
+    ctx.textAlign = 'left';
+    lines.forEach((ln, li) => {
+      ctx.fillStyle = li === 0 ? '#d4d8e2' : li === 1 ? '#6b7080' : li === 2 ? '#5b8af5' : '#38c9a0';
+      ctx.fillText(ln, bx + 7, by + 14 + li * 14);
+    });
+
+    // dots on lines
+    [[origProfile[idx], '#5b8af5'], ...(corrV!==null ? [[corrV,'#38c9a0']] : [])].forEach(([v,c]) => {
+      ctx.beginPath();
+      ctx.arc(xd, yToDisp(v), 3.5, 0, Math.PI*2);
+      ctx.fillStyle = c; ctx.fill();
+    });
+  }
+
+  // Store for hover redraws
+  canvas._drawArgs = [nmAxis, origProfile, corrProfile];
+}
+
+// ── hover events on plot canvas ───────────────────────────────────────────
+document.getElementById('pc-plot-canvas').addEventListener('mousemove', function(e) {
+  const rect = this.getBoundingClientRect();
+  plotHoverX = (e.clientX - rect.left) * (this.width / (window.devicePixelRatio||1)) / rect.width;
+  if (this._drawArgs) drawSpectralPlot(...this._drawArgs);
+});
+document.getElementById('pc-plot-canvas').addEventListener('mouseleave', function() {
+  plotHoverX = null;
+  if (this._drawArgs) drawSpectralPlot(...this._drawArgs);
+});
+
+// ── call updateSpectralPlot after correction finishes ─────────────────────
+const _origRunCorrection = runCorrection;
+// (patched below after runCorrection is defined — see end of runCorrection)
+
+// ── init ROI events after DOM ready ──────────────────────────────────────
+initRoiEvents();
 
 // ── Init ───────────────────────────────────────────────────────────────────
 updateFreqReadout();
