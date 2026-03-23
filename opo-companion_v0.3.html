@@ -188,6 +188,44 @@
     margin-bottom: 14px;
   }
   .dir-row .field { flex: 1; margin-bottom: 0; }
+  .preset-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .preset-label {
+    font-size: .68rem;
+    color: var(--muted);
+    font-family: var(--mono);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+  .btn-preset {
+    font-family: var(--mono);
+    font-size: .72rem;
+    font-weight: 500;
+    padding: 5px 12px;
+    border-radius: var(--rad);
+    border: 1px solid var(--border2);
+    background: var(--input-bg);
+    color: var(--label);
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    letter-spacing: .04em;
+  }
+  .btn-preset:hover {
+    background: rgba(224,168,50,.12);
+    border-color: var(--warn);
+    color: var(--warn);
+  }
+  .btn-preset.active {
+    background: rgba(224,168,50,.18);
+    border-color: var(--warn);
+    color: var(--warn);
+  }
 
   /* ── table ── */
   .table-wrap {
@@ -373,18 +411,25 @@
   <div class="card full amber">
     <div class="card-title">Sweep &amp; Export</div>
 
+    <div class="preset-row">
+      <span class="preset-label">Presets</span>
+      <button class="btn-preset active" id="preset-cd"   onclick="applyPreset('cd')">C–D stretch</button>
+      <button class="btn-preset"        id="preset-ch"   onclick="applyPreset('ch')">C–H stretch</button>
+      <button class="btn-preset"        id="preset-amid" onclick="applyPreset('amid')">Amide I</button>
+    </div>
+
     <div class="sweep-inputs">
       <div class="field">
         <label>Start λ_pump (nm)</label>
-        <input type="number" id="sw-start" value="834" step="0.1" min="1" oninput="updateFreqReadout()">
+        <input type="number" id="sw-start" value="834" step="0.1" min="1" oninput="updateFreqReadout(); clearPresetActive()">
       </div>
       <div class="field">
         <label>End λ_pump (nm)</label>
-        <input type="number" id="sw-stop" value="855" step="0.1" min="1" oninput="updateFreqReadout()">
+        <input type="number" id="sw-stop" value="855" step="0.1" min="1" oninput="updateFreqReadout(); clearPresetActive()">
       </div>
       <div class="field">
         <label>Step size (nm)</label>
-        <input type="number" id="sw-step" value="0.5" step="0.1" min="0.01">
+        <input type="number" id="sw-step" value="0.5" step="0.1" min="0.01" oninput="clearPresetActive()">
       </div>
     </div>
 
@@ -407,7 +452,7 @@
 
     <div class="btn-row">
       <button class="btn-primary" onclick="runSweep()">Generate</button>
-      <button class="btn-export" id="btn-export-tstep" onclick="exportTstep()" disabled>Export Tstep_CD.txt</button>
+      <button class="btn-export" id="btn-export-tstep" onclick="exportTstep()" disabled>Export Tstep.txt</button>
       <button class="btn-export" id="btn-export-ps1" onclick="exportPs1()" disabled>Export WLT_sweep.ps1</button>
       <button class="btn-secondary" onclick="clearSweep()">Clear</button>
     </div>
@@ -478,7 +523,27 @@ function calcDelay() {
   document.getElementById('r-delay').textContent = fmt(delay,0) + ' fs';
 }
 
-// ── Freq readout in sweep card ─────────────────────────────────────────────
+// ── Presets ────────────────────────────────────────────────────────────────
+const PRESETS = {
+  cd:   { start: 834,  stop: 855,  step: 0.5, label: 'C–D stretch'  },
+  ch:   { start: 780,  stop: 800,  step: 0.5, label: 'C–H stretch'  },
+  amid: { start: 878,  stop: 890,  step: 0.5, label: 'Amide I'      },
+};
+
+function applyPreset(key) {
+  const p = PRESETS[key];
+  if (!p) return;
+  document.getElementById('sw-start').value = p.start;
+  document.getElementById('sw-stop').value  = p.stop;
+  document.getElementById('sw-step').value  = p.step;
+  clearPresetActive();
+  document.getElementById(`preset-${key}`).classList.add('active');
+  updateFreqReadout();
+}
+
+function clearPresetActive() {
+  document.querySelectorAll('.btn-preset').forEach(b => b.classList.remove('active'));
+}
 function updateFreqReadout() {
   const startNm = parseFloat(document.getElementById('sw-start').value);
   const stopNm  = parseFloat(document.getElementById('sw-stop').value);
@@ -555,12 +620,14 @@ function clearSweep() {
   document.getElementById('status').textContent = '';
 }
 
-// ── Export: Tstep_CD.txt ───────────────────────────────────────────────────
+// ── Export: Tstep.txt ─────────────────────────────────────────────────────
 function exportTstep() {
   if (!sweepData.length) return;
   const lines = sweepData.map(r => Math.round(r.delay).toString());
+  const lastVal = lines[lines.length - 1];
+  for (let i = 0; i < 5; i++) lines.push(lastVal);
   const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/plain' });
-  triggerDownload(blob, 'Tstep_CD.txt');
+  triggerDownload(blob, 'Tstep.txt');
 }
 
 // ── Export: WLT_sweep.ps1 ─────────────────────────────────────────────────
@@ -578,7 +645,7 @@ function exportPs1() {
   const nSteps   = sweepData.length - 1;
 
   // Escape backslashes for PS1 double-quoted string
-  const inputPath = `${dir}\\Tstep_CD.txt`.replace(/\//g, '\\');
+  const inputPath = `${dir}\\Tstep.txt`.replace(/\//g, '\\');
 
   // Read original template and splice in the three values
   const ps1 = `# Add reference to System.Windows.Forms for SendKeys
