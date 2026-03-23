@@ -1258,7 +1258,20 @@ function loadTiff(file) {
 
 function loadParams(file) {
   pcSetStatus('Reading Sweep_parameters.txt…');
-  file.text().then(txt => {
+  file.arrayBuffer().then(buf => {
+    // Detect and decode UTF-16 LE (PowerShell default: FF FE BOM)
+    // or fall back to UTF-8
+    let txt;
+    const bytes = new Uint8Array(buf);
+    if (bytes[0] === 0xFF && bytes[1] === 0xFE) {
+      txt = new TextDecoder('utf-16le').decode(buf);
+    } else if (bytes[0] === 0xFE && bytes[1] === 0xFF) {
+      txt = new TextDecoder('utf-16be').decode(buf);
+    } else {
+      txt = new TextDecoder('utf-8').decode(buf);
+    }
+    // Strip any remaining BOM character (U+FEFF)
+    txt = txt.replace(/^\uFEFF/, '');
     try {
       const lines = txt.trim().split(/\r?\n/).filter(l => l.trim());
       const chMode = document.getElementById('pc-channels').value;
