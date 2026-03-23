@@ -709,6 +709,7 @@
         <div class="btn-row" style="margin-top:0;">
           <button class="btn-primary" id="pc-run-btn" onclick="runCorrection()" disabled
                   style="background:#7c3aed; border-color:#7c3aed;">Apply Correction</button>
+          <button class="btn-export" id="pc-export-btn" onclick="exportCorrectedStack()" disabled>Export Corrected Stack</button>
           <button class="btn-secondary" onclick="resetCorrection()">Reset</button>
         </div>
         <div class="pc-progress" id="pc-progress"><div class="pc-progress-bar" id="pc-progress-bar"></div></div>
@@ -1356,6 +1357,11 @@ function loadParams(file) {
         const cols = line.split(';');
         return [parseFloat(cols[2]), parseFloat(cols[3])];
       });
+      // Store col0 wavelengths (Angstroms → nm)
+      pc.paramsWavelengthsNm = lines.map(line => {
+        const col0 = parseFloat(line.split(';')[0]);
+        return isFinite(col0) ? col0 / 10 : null;
+      }).filter(v => v !== null);
       document.getElementById('pc-params-zone').classList.add('loaded');
       document.getElementById('pc-params-zone').childNodes[0].textContent =
         `✓ ${file.name}  (${lines.length} rows)`;
@@ -1541,10 +1547,11 @@ async function runCorrection() {
 
   // Refresh spectral plot with corrected data
   if (roi.defined) updateSpectralPlot();
+  document.getElementById('pc-export-btn').disabled = false;
 }
 
 function resetCorrection() {
-  pc = { tiffFrames:null, tiffBuf:null, powerVals:null, corrected:null, tiffName:'' };
+  pc = { tiffFrames:null, tiffBuf:null, powerVals:null, corrected:null, tiffName:'', rawPowerCols:null, paramsWavelengthsNm:null };
   ['pc-tiff-zone','pc-params-zone'].forEach(id => {
     const z = document.getElementById(id);
     z.classList.remove('loaded');
@@ -1557,7 +1564,8 @@ function resetCorrection() {
   document.getElementById('pc-power-table').style.display   = 'none';
   document.getElementById('pc-corrected-box').style.display = 'none';
   document.getElementById('pc-power-tbody').innerHTML = '';
-  document.getElementById('pc-run-btn').disabled = true;
+  document.getElementById('pc-run-btn').disabled    = true;
+  document.getElementById('pc-export-btn').disabled = true;
   document.getElementById('pc-frame-info').textContent  = '';
   document.getElementById('pc-slider-label').textContent = '—';
   document.getElementById('pc-frame-slider').value = 0;
@@ -1579,6 +1587,32 @@ function resetCorrection() {
 
 function pcSetStatus(msg) {
   document.getElementById('pc-status').textContent = msg;
+}
+
+// ── export corrected stack on demand ──────────────────────────────────────
+async function exportCorrectedStack() {
+  if (!pc.corrected || !pc.corrected.length) return;
+  const enc     = document.getElementById('pc-encoding').value;
+  const float32 = enc === 'float32';
+
+  pcSetStatus('Encoding TIFF…');
+  await new Promise(r => setTimeout(r, 30));
+
+  let encFrames;
+  if (enc === 'scale') {
+    let globalMax = 0;
+    pc.corrected.forEach(f => { for (let p = 0; p < f.length; p++) if (f[p] > globalMax) globalMax = f[p]; });
+    const scaleF = 65535 / (globalMax || 1);
+    encFrames = pc.corrected.map(f => { const s = new Float32Array(f.length); for (let p = 0; p < f.length; p++) s[p] = f[p] * scaleF; return s; });
+  } else {
+    encFrames = pc.corrected;
+  }
+
+  const outBuf  = TIFF.encode(encFrames, float32);
+  const suffix  = enc === 'float32' ? '_corrected_f32' : '_corrected';
+  const outName = pc.tiffName + suffix + '.tif';
+  triggerDownload(new Blob([outBuf], {type:'image/tiff'}), outName);
+  pcSetStatus(`Exported "${outName}"`);
 }
 
 // re-build table when channel selection changes
@@ -1696,17 +1730,23 @@ function roiMean(pixels, imgW, r) {
   return n > 0 ? sum / n : 0;
 }
 
-// ── get wavelength axis from sweep card, or fall back to frame index ───────
+// ── get wavelength axis: params col0 > sweep card > frame index ───────────
 function getWavelengthAxis(nFrames) {
+  // 1. Prefer actual measured wavelengths from Sweep_parameters.txt col0
+  if (pc.paramsWavelengthsNm && pc.paramsWavelengthsNm.length >= nFrames) {
+    return pc.paramsWavelengthsNm.slice(0, nFrames);
+  }
+  // 2. Fall back to sweep card start/step
   const start = parseFloat(document.getElementById('sw-start').value);
   const stop  = parseFloat(document.getElementById('sw-stop').value);
   const step  = parseFloat(document.getElementById('sw-step').value);
   if (isFinite(start) && isFinite(stop) && isFinite(step) && step > 0) {
     const axis = [];
     for (let i = 0; i < nFrames; i++) axis.push(start + i * step);
-    return axis; // nm
+    return axis;
   }
-  return Array.from({length: nFrames}, (_, i) => i + 1); // frame numbers
+  // 3. Frame numbers
+  return Array.from({length: nFrames}, (_, i) => i + 1);
 }
 
 function getStokesNm() {
