@@ -1194,79 +1194,74 @@ const TIFF = (() => {
 
   // ── encode frames to TIFF ArrayBuffer (16-bit or 32-bit grayscale) ─────────
   function encode(frames, float32 = false) {
-    const bps      = float32 ? 32 : 16;
-    const bytePx   = bps / 8;
-    const nFrames  = frames.length;
+    const bps     = float32 ? 32 : 16;
+    const bytePx  = bps / 8;
+    const nFrames = frames.length;
     if (!nFrames) throw new Error('No frames to encode');
     const { w, h } = frames[0];
+    const nPx      = w * h;
 
-    // Layout: 8-byte header, then for each frame: IFD then pixel data
-    // (interleaved IFD+data so each frame's dataOff is close to its IFD — avoids
-    //  large offset values that can confuse some readers on big stacks)
-    const nTags   = 11;
-    const ifdSize = 2 + nTags * 12 + 4;      // bytes per IFD
-    const frameBytes = w * h * bytePx;        // bytes per frame of pixel data
-    const frameSlot  = ifdSize + frameBytes;  // IFD + data interleaved per frame
+    // IFD: 2-byte tag count + nTags*12 + 4-byte next-IFD pointer
+    // Pad to multiple of 4 so pixel data is always 4-byte aligned
+    const nTags      = 11;
+    const ifdRaw     = 2 + nTags * 12 + 4;            // 138 bytes
+    const ifdPadded  = Math.ceil(ifdRaw / 4) * 4;     // 140 bytes (next multiple of 4)
+    const frameBytes = nPx * bytePx;
+    const frameSlot  = ifdPadded + frameBytes;
     const total      = 8 + nFrames * frameSlot;
 
-    // Sanity check before allocating
-    const totalMB = total / 1024 / 1024;
-    if (total > 2 * 1024 * 1024 * 1024) { // 2 GB hard limit for ArrayBuffer
-      throw new Error(`Output would be ${totalMB.toFixed(0)} MB — too large for in-browser export. Try fewer frames or use 16-bit clip mode.`);
+    const totalMB = total / 1048576;
+    if (total > 2147483648) {
+      throw new Error(`Output would be ${totalMB.toFixed(0)} MB — exceeds 2 GB browser limit.`);
     }
-
     let buf;
-    try {
-      buf = new ArrayBuffer(total);
-    } catch(e) {
-      throw new Error(`Could not allocate ${totalMB.toFixed(0)} MB buffer. Try closing other tabs or reducing stack size.`);
-    }
+    try { buf = new ArrayBuffer(total); }
+    catch(e) { throw new Error(`Cannot allocate ${totalMB.toFixed(0)} MB — try closing other tabs.`); }
+
     const dv = new DataView(buf);
 
-    // Header (little-endian)
+    // TIFF header (little-endian)
     dv.setUint16(0, 0x4949, true);
-    dv.setUint16(2, 42, true);
-    dv.setUint32(4, 8, true); // first IFD at byte 8
+    dv.setUint16(2, 42,     true);
+    dv.setUint32(4, 8,      true); // first IFD at byte 8
 
-    function w16(off, v) { dv.setUint16(off, v, true); }
-    function w32(off, v) { dv.setUint32(off, v >>> 0, true); } // >>> 0 keeps it unsigned
-    function writeTag(off, tag, type, count, val) {
-      w16(off, tag); w16(off+2, type); w32(off+4, count); w32(off+8, val);
+    function w16(o, v) { dv.setUint16(o, v,        true); }
+    function w32(o, v) { dv.setUint32(o, v >>> 0,  true); }
+    function tag(o, tg, type, count, val) {
+      w16(o, tg); w16(o+2, type); w32(o+4, count); w32(o+8, val);
     }
 
     for (let fi = 0; fi < nFrames; fi++) {
       const ifdOff  = 8 + fi * frameSlot;
-      const dataOff = ifdOff + ifdSize;
-      const nextIfd = fi < nFrames - 1 ? (8 + (fi+1) * frameSlot) : 0;
+      const dataOff = ifdOff + ifdPadded;             // always 4-byte aligned
+      const nextIfd = fi < nFrames - 1 ? (ifdOff + frameSlot) : 0;
 
       w16(ifdOff, nTags);
       let t = ifdOff + 2;
-      writeTag(t,  256, 4, 1, w);                  t+=12; // ImageWidth
-      writeTag(t,  257, 4, 1, h);                  t+=12; // ImageLength
-      writeTag(t,  258, 3, 1, bps);                t+=12; // BitsPerSample
-      writeTag(t,  259, 3, 1, 1);                  t+=12; // Compression=None
-      writeTag(t,  262, 3, 1, 1);                  t+=12; // PhotometricInterp
-      writeTag(t,  273, 4, 1, dataOff);            t+=12; // StripOffsets
-      writeTag(t,  277, 3, 1, 1);                  t+=12; // SamplesPerPixel
-      writeTag(t,  278, 4, 1, h);                  t+=12; // RowsPerStrip=full frame
-      writeTag(t,  279, 4, 1, frameBytes);          t+=12; // StripByteCounts
-      writeTag(t,  284, 3, 1, 1);                  t+=12; // PlanarConfig=Chunky
-      writeTag(t,  339, 3, 1, float32 ? 3 : 1);   t+=12; // SampleFormat
+      tag(t, 256, 4, 1, w);                 t += 12; // ImageWidth  (LONG)
+      tag(t, 257, 4, 1, h);                 t += 12; // ImageLength (LONG)
+      tag(t, 258, 3, 1, bps);               t += 12; // BitsPerSample (SHORT)
+      tag(t, 259, 3, 1, 1);                 t += 12; // Compression = None
+      tag(t, 262, 3, 1, 1);                 t += 12; // PhotometricInterp = BlackIsZero
+      tag(t, 273, 4, 1, dataOff);           t += 12; // StripOffsets
+      tag(t, 277, 3, 1, 1);                 t += 12; // SamplesPerPixel
+      tag(t, 278, 4, 1, h);                 t += 12; // RowsPerStrip = full image
+      tag(t, 279, 4, 1, frameBytes);        t += 12; // StripByteCounts
+      tag(t, 284, 3, 1, 1);                 t += 12; // PlanarConfiguration = Chunky
+      tag(t, 339, 3, 1, float32 ? 3 : 1);  t += 12; // SampleFormat (1=uint, 3=ieeefp)
       w32(t, nextIfd);
 
-      // Write pixel data using typed array view — much faster than setUint16 loop
+      // Write pixel data via DataView — avoids typed-array alignment requirements
       const src = frames[fi]; // Float32Array
-      const nPx = w * h;
       if (float32) {
-        const view = new Float32Array(buf, dataOff, nPx);
-        view.set(src);
+        for (let p = 0; p < nPx; p++)
+          dv.setFloat32(dataOff + p * 4, src[p], true);
       } else {
-        // Convert Float32 → Uint16 in a typed array (clamp without Math.round overhead)
-        const view = new Uint16Array(buf, dataOff, nPx);
         for (let p = 0; p < nPx; p++) {
           const v = src[p];
-          // Branchless clamp to [0, 65535]
-          view[p] = v < 0 ? 0 : v > 65535 ? 65535 : (v + 0.5) | 0;
+          dv.setUint16(dataOff + p * 2,
+            v <= 0 ? 0 : v >= 65535 ? 65535 : (v + 0.5) | 0,
+            true);
         }
       }
     }
