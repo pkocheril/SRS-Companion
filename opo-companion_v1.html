@@ -1193,12 +1193,16 @@ const TIFF = (() => {
   }
 
   // ── encode frames to TIFF ArrayBuffer (16-bit or 32-bit grayscale) ─────────
-  function encode(frames, float32 = false) {
+  function encode(frames, float32 = false, w, h) {
     const bps     = float32 ? 32 : 16;
     const bytePx  = bps / 8;
     const nFrames = frames.length;
     if (!nFrames) throw new Error('No frames to encode');
-    const { w, h } = frames[0];
+    // w/h can be passed explicitly (when frames are plain TypedArrays)
+    // or read from frames[0] if it carries metadata (decoded TIFF frames)
+    if (w === undefined) w = frames[0].w;
+    if (h === undefined) h = frames[0].h;
+    if (!w || !h) throw new Error(`Invalid dimensions: w=${w} h=${h}. Pass w and h explicitly.`);
     const nPx      = w * h;
 
     // IFD: 2-byte tag count + nTags*12 + 4-byte next-IFD pointer
@@ -1537,7 +1541,8 @@ async function runCorrection() {
 
   let outBuf;
   try {
-    outBuf = TIFF.encode(encFrames, float32);
+    const { w, h } = pc.tiffFrames[0];
+    outBuf = TIFF.encode(encFrames, float32, w, h);
   } catch(err) {
     pcSetStatus('Encoding failed: ' + err.message);
     prog.style.display = 'none'; progBar.style.width = '0%';
@@ -1625,7 +1630,8 @@ async function exportCorrectedStack() {
 
   let outBuf;
   try {
-    outBuf = TIFF.encode(encFrames, float32);
+    const { w, h } = pc.tiffFrames[0];
+    outBuf = TIFF.encode(encFrames, float32, w, h);
   } catch(err) {
     pcSetStatus('Encoding failed: ' + err.message);
     return;
