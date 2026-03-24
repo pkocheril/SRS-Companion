@@ -495,6 +495,85 @@
     color: var(--muted);
     padding: 4px 12px 6px;
   }
+  /* ── Card 5: spectral analysis ── */
+  .card.teal .card-title::before { background: #2dd4bf; }
+  .sp-image-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .sp-image-label {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sp-roi-dot {
+    width: 8px; height: 8px; border-radius: 1px; display: inline-block;
+  }
+  .sp-canvas-wrap {
+    position: relative;
+    border: 1px solid var(--border2);
+    border-radius: var(--rad);
+    overflow: hidden;
+    background: #000;
+  }
+  .sp-canvas-wrap canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+  .sp-canvas-wrap .sp-overlay {
+    position: absolute; inset: 0; cursor: crosshair;
+  }
+  .sp-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .sp-slider-row input[type=range] {
+    flex: 1; accent-color: #2dd4bf; margin: 0;
+  }
+  .sp-slider-label {
+    font-family: var(--mono);
+    font-size: .68rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .sp-plots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .sp-plot-box {
+    border: 1px solid var(--border2);
+    border-radius: var(--rad);
+    overflow: hidden;
+    background: var(--input-bg);
+  }
+  .sp-plot-title {
+    font-family: var(--mono);
+    font-size: .65rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .sp-plot-box canvas { display: block; width: 100%; cursor: crosshair; }
+  .sp-notice {
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: var(--muted);
+    text-align: center;
+    padding: 24px;
+  }
 </style>
 </head>
 <body>
@@ -759,6 +838,84 @@
   </div>
 
 </div><!-- .grid -->
+
+<!-- ══ CARD 5: Spectral Analysis (full width, outside main grid) ══ -->
+<div style="max-width:980px; margin-top:20px;">
+<div class="card teal" id="sp-card">
+  <div class="card-title" style="margin-bottom:14px;">Spectral Analysis</div>
+
+  <div id="sp-notice" class="sp-notice">
+    Apply power correction first, then this section will activate.
+  </div>
+
+  <div id="sp-body" style="display:none;">
+
+    <!-- two image panels side by side -->
+    <div class="sp-image-row">
+      <div>
+        <div class="sp-image-label">
+          <span class="sp-roi-dot" style="background:#f97316;"></span>
+          <span style="color:#f97316;">Signal ROI</span>
+          <span style="color:var(--border2); font-size:.60rem; margin-left:4px;">(drag to select)</span>
+        </div>
+        <div class="sp-canvas-wrap" id="sp-sig-wrap">
+          <canvas id="sp-canvas-sig"></canvas>
+          <canvas class="sp-overlay" id="sp-overlay-sig"></canvas>
+        </div>
+      </div>
+      <div>
+        <div class="sp-image-label">
+          <span class="sp-roi-dot" style="background:#60a5fa;"></span>
+          <span style="color:#60a5fa;">Background ROI</span>
+          <span style="color:var(--border2); font-size:.60rem; margin-left:4px;">(drag to select)</span>
+        </div>
+        <div class="sp-canvas-wrap" id="sp-bkg-wrap">
+          <canvas id="sp-canvas-bkg"></canvas>
+          <canvas class="sp-overlay" id="sp-overlay-bkg"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- frame slider -->
+    <div class="sp-slider-row">
+      <span class="sp-slider-label">Frame</span>
+      <input type="range" id="sp-frame-slider" min="0" value="0"
+             oninput="spPreviewFrame(parseInt(this.value))">
+      <span class="sp-slider-label" id="sp-slider-label">—</span>
+    </div>
+
+    <!-- plots -->
+    <div class="sp-plots">
+      <div class="sp-plot-box">
+        <div class="sp-plot-title">
+          <span>ROI &amp; Background Spectra</span>
+          <div class="pc-plot-legend">
+            <div class="pc-legend-item"><div class="pc-legend-dot" style="background:#f97316;"></div>Signal</div>
+            <div class="pc-legend-item"><div class="pc-legend-dot" style="background:#60a5fa;"></div>Background</div>
+          </div>
+        </div>
+        <div id="sp-plot-spectra-wrap"><div class="sp-notice" style="padding:16px;">Draw both ROIs to see spectra</div></div>
+      </div>
+      <div class="sp-plot-box">
+        <div class="sp-plot-title">
+          <span>ROI − Background</span>
+          <div class="pc-plot-legend">
+            <div class="pc-legend-item"><div class="pc-legend-dot" style="background:#2dd4bf;"></div>Difference</div>
+          </div>
+        </div>
+        <div id="sp-plot-diff-wrap"><div class="sp-notice" style="padding:16px;">Draw both ROIs to see difference</div></div>
+      </div>
+    </div>
+
+    <!-- export -->
+    <div class="btn-row" style="margin-top:0;">
+      <button class="btn-export" id="sp-export-btn" onclick="spExportCsv()" disabled
+              style="color:#2dd4bf; border-color:#2dd4bf;">Export Spectra CSV</button>
+    </div>
+
+  </div>
+</div>
+</div>
 
 <script>
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -1441,6 +1598,13 @@ function previewFrame(idx) {
 
   // Keep ROI overlay in sync
   if (roi.defined || roi.active) drawRoiOverlays();
+
+  // Keep Card 5 in sync
+  if (pc.corrected) {
+    spPreviewFrame(idx);
+    const s = document.getElementById('sp-frame-slider');
+    if (s) s.value = idx;
+  }
 }
 
 function renderToCanvas(pixels, w, h, canvasId) {
@@ -1568,6 +1732,9 @@ async function runCorrection() {
   // Refresh spectral plot with corrected data
   if (roi.defined) updateSpectralPlot();
   document.getElementById('pc-export-btn').disabled = false;
+
+  // Activate Card 5
+  spActivate();
 }
 
 function resetCorrection() {
@@ -1591,6 +1758,23 @@ function resetCorrection() {
   document.getElementById('pc-frame-slider').value = 0;
   document.getElementById('pc-progress').style.display = 'none';
   pcSetStatus('');
+  // Reset Card 5
+  sp.sigRoi = { active:false, defined:false, x0:0,y0:0,x1:0,y1:0 };
+  sp.bkgRoi = { active:false, defined:false, x0:0,y0:0,x1:0,y1:0 };
+  sp.lastSpectra = null;
+  sp.hoverX = { spectra:null, diff:null };
+  document.getElementById('sp-notice').style.display = 'block';
+  document.getElementById('sp-body').style.display   = 'none';
+  document.getElementById('sp-export-btn').disabled  = true;
+  ['sp-overlay-sig','sp-overlay-bkg'].forEach(id => {
+    const c = document.getElementById(id);
+    if (c) c.getContext('2d').clearRect(0,0,c.width,c.height);
+  });
+  document.getElementById('sp-plot-spectra-wrap').innerHTML =
+    '<div class="sp-notice" style="padding:16px;">Draw both ROIs to see spectra</div>';
+  document.getElementById('sp-plot-diff-wrap').innerHTML =
+    '<div class="sp-notice" style="padding:16px;">Draw both ROIs to see difference</div>';
+
   // Clear ROI and plot
   roi.active = false; roi.defined = false;
   drawRoiOverlays();
@@ -1993,6 +2177,343 @@ const _origRunCorrection = runCorrection;
 
 // ── init ROI events after DOM ready ──────────────────────────────────────
 initRoiEvents();
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// CARD 5 — SPECTRAL ANALYSIS
+// ════════════════════════════════════════════════════════════════════════════
+const sp = {
+  sigRoi: { active:false, defined:false, x0:0,y0:0,x1:0,y1:0 },
+  bkgRoi: { active:false, defined:false, x0:0,y0:0,x1:0,y1:0 },
+  hoverX: { spectra: null, diff: null },
+  lastSpectra: null, // { nmAxis, cm1Axis, sigProfile, bkgProfile, diffProfile }
+};
+
+// ── activate card once correction is done ────────────────────────────────
+function spActivate() {
+  if (!pc.corrected || !pc.corrected.length) return;
+  document.getElementById('sp-notice').style.display = 'none';
+  document.getElementById('sp-body').style.display   = 'block';
+
+  const n = pc.corrected.length;
+  const slider = document.getElementById('sp-frame-slider');
+  slider.max   = n - 1;
+  slider.value = 0;
+  spPreviewFrame(0);
+}
+
+// ── frame preview ──────────────────────────────────────────────────────────
+function spPreviewFrame(idx) {
+  if (!pc.corrected) return;
+  const frame = pc.corrected[idx];
+  if (!frame) return;
+  const { w, h } = pc.tiffFrames[0];
+  document.getElementById('sp-slider-label').textContent = `${idx + 1} / ${pc.corrected.length}`;
+  spRenderCanvas('sp-canvas-sig', frame, w, h);
+  spRenderCanvas('sp-canvas-bkg', frame, w, h);
+  spDrawOverlay('sp-overlay-sig', sp.sigRoi, '#f97316');
+  spDrawOverlay('sp-overlay-bkg', sp.bkgRoi, '#60a5fa');
+}
+
+function spRenderCanvas(canvasId, pixels, w, h) {
+  const canvas = document.getElementById(canvasId);
+  canvas.width = w; canvas.height = h;
+  const ctx  = canvas.getContext('2d');
+  const img  = ctx.createImageData(w, h);
+  const data = img.data;
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < pixels.length; i++) {
+    if (pixels[i] < mn) mn = pixels[i];
+    if (pixels[i] > mx) mx = pixels[i];
+  }
+  const range = mx - mn || 1;
+  for (let i = 0; i < pixels.length; i++) {
+    const v = ((pixels[i] - mn) / range * 255) | 0;
+    data[i*4]=v; data[i*4+1]=v; data[i*4+2]=v; data[i*4+3]=255;
+  }
+  ctx.putImageData(img, 0, 0);
+  // sync overlay dimensions
+  const ov = document.getElementById(canvasId.replace('canvas','overlay'));
+  if (ov) { ov.width = w; ov.height = h; }
+}
+
+// ── ROI drawing ────────────────────────────────────────────────────────────
+function spInitOverlay(overlayId, roiObj, color, otherOverlayId, otherRoiObj, otherColor) {
+  const ov = document.getElementById(overlayId);
+
+  function coords(e) {
+    const rect = ov.getBoundingClientRect();
+    return {
+      x: Math.round((e.clientX - rect.left) * ov.width  / rect.width),
+      y: Math.round((e.clientY - rect.top)  * ov.height / rect.height),
+    };
+  }
+
+  ov.addEventListener('mousedown', e => {
+    if (!pc.corrected) return;
+    const {x,y} = coords(e);
+    roiObj.active=true; roiObj.defined=false;
+    roiObj.x0=roiObj.x1=x; roiObj.y0=roiObj.y1=y;
+    e.preventDefault();
+  });
+  ov.addEventListener('mousemove', e => {
+    if (!roiObj.active) return;
+    const {x,y} = coords(e);
+    roiObj.x1=x; roiObj.y1=y;
+    spDrawOverlay(overlayId, roiObj, color);
+  });
+  const finish = () => {
+    if (!roiObj.active) return;
+    roiObj.active  = false;
+    roiObj.defined = Math.abs(roiObj.x1-roiObj.x0)>2 && Math.abs(roiObj.y1-roiObj.y0)>2;
+    spDrawOverlay(overlayId, roiObj, color);
+    if (sp.sigRoi.defined && sp.bkgRoi.defined) spUpdatePlots();
+  };
+  ov.addEventListener('mouseup',    finish);
+  ov.addEventListener('mouseleave', finish);
+}
+
+function spGetRect(roiObj, imgW, imgH) {
+  return {
+    x: Math.max(0, Math.min(roiObj.x0, roiObj.x1)),
+    y: Math.max(0, Math.min(roiObj.y0, roiObj.y1)),
+    w: Math.min(imgW, Math.max(roiObj.x0,roiObj.x1)) - Math.max(0,Math.min(roiObj.x0,roiObj.x1)),
+    h: Math.min(imgH, Math.max(roiObj.y0,roiObj.y1)) - Math.max(0,Math.min(roiObj.y0,roiObj.y1)),
+  };
+}
+
+function spDrawOverlay(overlayId, roiObj, color) {
+  const ov  = document.getElementById(overlayId);
+  if (!ov) return;
+  const ctx = ov.getContext('2d');
+  ctx.clearRect(0, 0, ov.width, ov.height);
+  if (!roiObj.defined && !roiObj.active) return;
+
+  const r = spGetRect(roiObj, ov.width, ov.height);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(0, 0, ov.width, ov.height);
+  ctx.clearRect(r.x, r.y, r.w, r.h);
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 1.5;
+  ctx.strokeRect(r.x+.5, r.y+.5, r.w, r.h);
+
+  const cs = 5;
+  ctx.fillStyle = color;
+  [[r.x,r.y],[r.x+r.w,r.y],[r.x,r.y+r.h],[r.x+r.w,r.y+r.h]].forEach(([cx,cy]) => {
+    ctx.fillRect(cx-cs/2, cy-cs/2, cs, cs);
+  });
+
+  // label with px count
+  ctx.fillStyle = color;
+  ctx.font = `10px 'IBM Plex Mono', monospace`;
+  ctx.textAlign = 'left';
+  ctx.fillText(`${r.w}×${r.h}`, r.x+3, Math.max(r.y-3, 10));
+}
+
+// ── profile extraction ─────────────────────────────────────────────────────
+function spRoiMean(pixels, imgW, r) {
+  if (r.w<=0 || r.h<=0) return 0;
+  let sum=0, n=0;
+  for (let row=r.y; row<r.y+r.h; row++)
+    for (let col=r.x; col<r.x+r.w; col++) { sum+=pixels[row*imgW+col]; n++; }
+  return n>0 ? sum/n : 0;
+}
+
+// ── compute and draw both plots ────────────────────────────────────────────
+function spUpdatePlots() {
+  if (!pc.corrected || !sp.sigRoi.defined || !sp.bkgRoi.defined) return;
+  const { w, h } = pc.tiffFrames[0];
+  const nF       = pc.corrected.length;
+  const nmAxis   = getWavelengthAxis(nF);
+  const stokes   = getStokesNm();
+  const cm1Axis  = nmAxis.map(nm => nmToCm1(nm) - nmToCm1(stokes));
+  const sigRect  = spGetRect(sp.sigRoi, w, h);
+  const bkgRect  = spGetRect(sp.bkgRoi, w, h);
+
+  const sigProfile  = pc.corrected.map(f => spRoiMean(f, w, sigRect));
+  const bkgProfile  = pc.corrected.map(f => spRoiMean(f, w, bkgRect));
+  const diffProfile = sigProfile.map((v, i) => v - bkgProfile[i]);
+
+  sp.lastSpectra = { nmAxis, cm1Axis, sigProfile, bkgProfile, diffProfile };
+
+  spDrawSpectraPlot(nmAxis, cm1Axis, sigProfile, bkgProfile);
+  spDrawDiffPlot(nmAxis, cm1Axis, diffProfile);
+  document.getElementById('sp-export-btn').disabled = false;
+}
+
+// ── shared plot drawing engine ─────────────────────────────────────────────
+function spMakePlotCanvas(containerId, height) {
+  const wrap  = document.getElementById(containerId);
+  wrap.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  canvas.height = height;
+  canvas.style.cssText = 'display:block;width:100%;cursor:crosshair;';
+  wrap.appendChild(canvas);
+  const dpr   = window.devicePixelRatio || 1;
+  const dispW = wrap.clientWidth || 450;
+  const dispH = height;
+  canvas.style.width  = dispW + 'px';
+  canvas.style.height = dispH + 'px';
+  canvas.width  = Math.round(dispW * dpr);
+  canvas.height = Math.round(dispH * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { canvas, ctx, dispW, dispH };
+}
+
+function spDrawPlot(containerId, nmAxis, cm1Axis, series, hoverKey) {
+  // series: [{profile, color, dash}]
+  const { canvas, ctx, dispW, dispH } = spMakePlotCanvas(containerId, 200);
+
+  const PAD = { top:18, right:20, bottom:52, left:62 };
+  const pw  = dispW - PAD.left - PAD.right;
+  const ph  = dispH - PAD.top  - PAD.bottom;
+
+  const allVals = series.flatMap(s => s.profile);
+  let yMin = Math.min(...allVals), yMax = Math.max(...allVals);
+  const yPad = (yMax - yMin) * 0.08 || 1;
+  yMin -= yPad; yMax += yPad;
+
+  const xD = i  => PAD.left + (i / (nmAxis.length-1||1)) * pw;
+  const yD = v  => PAD.top  + ph - ((v - yMin) / (yMax - yMin)) * ph;
+
+  // bg
+  ctx.fillStyle = '#1c1f26';
+  ctx.fillRect(PAD.left, PAD.top, pw, ph);
+
+  // y gridlines + labels
+  ctx.font = `10px 'IBM Plex Mono', monospace`;
+  ctx.textAlign = 'right';
+  for (let g=0; g<=4; g++) {
+    const yv = yMin + (yMax-yMin)*g/4, yd = yD(yv);
+    ctx.strokeStyle='#252830'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(PAD.left,yd); ctx.lineTo(PAD.left+pw,yd); ctx.stroke();
+    ctx.fillStyle='#6b7080';
+    ctx.fillText(yv>=1000?(yv/1000).toFixed(1)+'k':yv.toFixed(0), PAD.left-5, yd+3);
+  }
+  // y axis label
+  ctx.save();
+  ctx.translate(12, PAD.top+ph/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.fillStyle='#8b91a0';
+  ctx.fillText('Mean intensity', 0, 0);
+  ctx.restore();
+
+  // x ticks and dual axis labels
+  const hasNm = nmAxis[0] !== 1 || nmAxis.length===1;
+  const nTick = Math.min(nmAxis.length, 8);
+  const step  = Math.max(1, Math.floor(nmAxis.length/nTick));
+  ctx.textAlign = 'center'; ctx.font = `10px 'IBM Plex Mono', monospace`;
+  for (let i=0; i<nmAxis.length; i+=step) {
+    const xd = xD(i);
+    ctx.strokeStyle='#31353f'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(xd,PAD.top+ph); ctx.lineTo(xd,PAD.top+ph+4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xd,PAD.top);    ctx.lineTo(xd,PAD.top-4);    ctx.stroke();
+    if (hasNm) {
+      ctx.fillStyle='#8b91a0'; ctx.fillText(nmAxis[i].toFixed(1),  xd, PAD.top+ph+14);
+      ctx.fillStyle='#6b7080'; ctx.fillText(Math.round(cm1Axis[i]),xd, PAD.top-7);
+    } else {
+      ctx.fillStyle='#8b91a0'; ctx.fillText('Frame '+nmAxis[i], xd, PAD.top+ph+14);
+    }
+  }
+  if (hasNm) {
+    ctx.fillStyle='#8b91a0'; ctx.fillText('Pump wavelength (nm)', PAD.left+pw/2, dispH-4);
+    ctx.fillStyle='#6b7080'; ctx.fillText('ν_vib (cm⁻¹)',        PAD.left+pw/2, 9);
+  }
+  // border
+  ctx.strokeStyle='#31353f'; ctx.lineWidth=1;
+  ctx.strokeRect(PAD.left, PAD.top, pw, ph);
+
+  // lines
+  series.forEach(({ profile, color, dash=[] }) => {
+    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.setLineDash(dash);
+    profile.forEach((v,i) => { i===0 ? ctx.moveTo(xD(i),yD(v)) : ctx.lineTo(xD(i),yD(v)); });
+    ctx.stroke(); ctx.setLineDash([]);
+  });
+
+  // hover crosshair
+  const hoverX = sp.hoverX[hoverKey];
+  if (hoverX !== null) {
+    const idx = Math.max(0, Math.min(nmAxis.length-1, Math.round((hoverX-PAD.left)/pw*(nmAxis.length-1))));
+    const xd  = xD(idx);
+    ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(xd,PAD.top); ctx.lineTo(xd,PAD.top+ph); ctx.stroke();
+
+    const tipLines = [
+      hasNm ? `λ=${nmAxis[idx].toFixed(2)} nm` : `Frame ${nmAxis[idx]}`,
+      hasNm ? `ν=${Math.round(cm1Axis[idx])} cm⁻¹` : '',
+      ...series.map(s => `${s.label}: ${s.profile[idx].toFixed(1)}`),
+    ].filter(Boolean);
+    const boxW=150, boxH=tipLines.length*14+10;
+    let bx=xd+6, by=PAD.top+6;
+    if (bx+boxW>PAD.left+pw) bx=xd-boxW-6;
+    ctx.fillStyle='rgba(14,15,17,.92)'; ctx.strokeStyle='#31353f'; ctx.lineWidth=1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx,by,boxW,boxH,4); else ctx.rect(bx,by,boxW,boxH);
+    ctx.fill(); ctx.stroke();
+    ctx.font=`10px 'IBM Plex Mono', monospace`; ctx.textAlign='left';
+    tipLines.forEach((ln,li) => {
+      ctx.fillStyle = li===0?'#d4d8e2' : li===1?'#6b7080' : series[li-2]?.color||'#d4d8e2';
+      ctx.fillText(ln, bx+7, by+14+li*14);
+    });
+    series.forEach(({profile, color}) => {
+      ctx.beginPath(); ctx.arc(xd,yD(profile[idx]),3.5,0,Math.PI*2);
+      ctx.fillStyle=color; ctx.fill();
+    });
+  }
+
+  // wire hover
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    sp.hoverX[hoverKey] = (e.clientX-rect.left)*(canvas.width/(window.devicePixelRatio||1))/rect.width;
+    spDrawSpectraPlot(sp.lastSpectra.nmAxis, sp.lastSpectra.cm1Axis, sp.lastSpectra.sigProfile, sp.lastSpectra.bkgProfile);
+    spDrawDiffPlot(sp.lastSpectra.nmAxis, sp.lastSpectra.cm1Axis, sp.lastSpectra.diffProfile);
+  });
+  canvas.addEventListener('mouseleave', () => {
+    sp.hoverX[hoverKey] = null;
+    spDrawSpectraPlot(sp.lastSpectra.nmAxis, sp.lastSpectra.cm1Axis, sp.lastSpectra.sigProfile, sp.lastSpectra.bkgProfile);
+    spDrawDiffPlot(sp.lastSpectra.nmAxis, sp.lastSpectra.cm1Axis, sp.lastSpectra.diffProfile);
+  });
+}
+
+function spDrawSpectraPlot(nmAxis, cm1Axis, sigProfile, bkgProfile) {
+  spDrawPlot('sp-plot-spectra-wrap', nmAxis, cm1Axis, [
+    { profile: sigProfile, color: '#f97316', label: 'Signal' },
+    { profile: bkgProfile, color: '#60a5fa', label: 'Bkg' },
+  ], 'spectra');
+}
+
+function spDrawDiffPlot(nmAxis, cm1Axis, diffProfile) {
+  // Zero line reference
+  spDrawPlot('sp-plot-diff-wrap', nmAxis, cm1Axis, [
+    { profile: diffProfile, color: '#2dd4bf', label: 'ROI−Bkg' },
+  ], 'diff');
+}
+
+// ── CSV export ────────────────────────────────────────────────────────────
+function spExportCsv() {
+  const d = sp.lastSpectra;
+  if (!d) return;
+  const rows = ['Pump_wavelength_nm,ROI,Background,Frequency_cm-1,ROI-Bkgd'];
+  for (let i = 0; i < d.nmAxis.length; i++) {
+    rows.push([
+      d.nmAxis[i].toFixed(4),
+      d.sigProfile[i].toFixed(4),
+      d.bkgProfile[i].toFixed(4),
+      d.cm1Axis[i].toFixed(2),
+      d.diffProfile[i].toFixed(4),
+    ].join(','));
+  }
+  triggerDownload(new Blob([rows.join('\r\n')], {type:'text/csv'}), 'spectra.csv');
+}
+
+// ── init overlays (called after DOM ready) ────────────────────────────────
+function spInit() {
+  spInitOverlay('sp-overlay-sig', sp.sigRoi, '#f97316');
+  spInitOverlay('sp-overlay-bkg', sp.bkgRoi, '#60a5fa');
+}
+spInit();
 
 // ── Init ───────────────────────────────────────────────────────────────────
 updateFreqReadout();
