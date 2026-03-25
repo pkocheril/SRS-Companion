@@ -1639,7 +1639,6 @@ async function runCorrection() {
 
   const nF     = pc.tiffFrames.length;
   const norm   = document.getElementById('pc-norm').value;
-  const enc    = document.getElementById('pc-encoding').value;
   const refIdx = parseInt(document.getElementById('pc-ref-frame').value || '1') - 1;
 
   const powers = getPowerArray();
@@ -1678,55 +1677,15 @@ async function runCorrection() {
     pc.corrected.push(out);
   }
 
-  // Scale pass (if needed) — done before encoding
-  const float32 = enc === 'float32';
-  let encFrames;
-
-  progBar.style.width = '85%';
-  pcSetStatus('Scaling frames…');
-  await new Promise(r => setTimeout(r, 0));
-
-  if (enc === 'scale') {
-    const scaleF = 65535 / (globalMax || 1);
-    encFrames = pc.corrected.map(f => {
-      const s = new Float32Array(f.length);
-      for (let p = 0; p < f.length; p++) s[p] = f[p] * scaleF;
-      return s;
-    });
-  } else {
-    encFrames = pc.corrected;
-  }
-
-  // Encode — this is synchronous and CPU-bound; yield first so the browser repaints
-  progBar.style.width = '90%';
-  const estMB = (encFrames.length * encFrames[0].length * (float32 ? 4 : 2) / 1024 / 1024).toFixed(0);
-  pcSetStatus(`Encoding TIFF… (~${estMB} MB, this may take a moment)`);
-  await new Promise(r => setTimeout(r, 30)); // longer yield to ensure repaint
-
-  let outBuf;
-  try {
-    const { w, h } = pc.tiffFrames[0];
-    outBuf = TIFF.encode(encFrames, float32, w, h);
-  } catch(err) {
-    pcSetStatus('Encoding failed: ' + err.message);
-    prog.style.display = 'none'; progBar.style.width = '0%';
-    return;
-  }
-
   progBar.style.width = '100%';
-  pcSetStatus('Saving…');
   await new Promise(r => setTimeout(r, 0));
-
-  const suffix  = enc === 'float32' ? '_corrected_f32' : '_corrected';
-  const outName = pc.tiffName + suffix + '.tif';
-  triggerDownload(new Blob([outBuf], {type:'image/tiff'}), outName);
 
   // Update preview
   previewFrame(parseInt(document.getElementById('pc-frame-slider').value));
   document.getElementById('pc-corrected-box').style.display = 'block';
   buildPowerTable();
 
-  pcSetStatus(`Done — exported "${outName}"  (${nF} frames, factor range ${Math.min(...factors).toFixed(3)}–${Math.max(...factors).toFixed(3)})`);
+  pcSetStatus(`Done — ${nF} frames corrected (factor range ${Math.min(...factors).toFixed(3)}–${Math.max(...factors).toFixed(3)}). Use "Export Corrected Stack" to save.`);
   setTimeout(() => { prog.style.display='none'; progBar.style.width='0%'; }, 2000);
 
   // Refresh spectral plot with corrected data
