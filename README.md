@@ -42,4 +42,4 @@ The spectra can then be exported as a single ```.csv``` after processing.
 # How to cite
 If you found any of these functions useful, please cite this code as:
 
-1. PA Kocheril, RE Leighton, N Naji, D Lee, H Wang, J Du, and L Wei*. Towards accurate predictions of bond-selective fluorescence spectra. DOI: 10.48550/arXiv.2601.11902
+1. PA Kocheril, RE Leighton, N Naji, D Lee, H Wang, J Du, and L Wei\*. Toward accurate predictions of bond-selective fluorescence spectra. *J. Chem. Phys.* **2026**, *164*, 130901. DOI: 10.1063/5.0323289
